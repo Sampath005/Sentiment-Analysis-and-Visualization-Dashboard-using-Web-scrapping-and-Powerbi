@@ -1,6 +1,11 @@
 from bs4 import BeautifulSoup
 import requests
-import csv
+import pandas as pd
+import string
+from nltk.corpus import stopwords
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
 
 #headers for not being blocked
 User_agent = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36"}
@@ -8,7 +13,7 @@ User_agent = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebK
 # list for storing products links
 product_links = []
 #iterating pages by for loop
-for i in range(1,40):
+for i in range(1,2):
     # giving request to the website
     r = requests.get(f'https://www.flipkart.com/search?q=laptops&otracker=search&otracker1=search&marketplace=FLIPKART&as-show=on&as=off&page={i}',headers=User_agent)
     #getting content form website
@@ -39,7 +44,7 @@ for i in product_links:
         Name = soup.find('span',{'class':'B_NuCI'}).text.strip()
     except :
         Name = None
-    print(Name)
+    # print(Name)
     # Extracting product price
     try:
         Actual_price = soup.find('div',{'class':'_3I9_wc _2p6lqe'}).text.strip()
@@ -79,7 +84,7 @@ for i in product_links:
             # print(No,ratings)
             if No+1==1:
                 One_star_rating = ratings.text.strip()
-                print(One_star_rating)
+                # print(One_star_rating)
             elif No+1 ==2:
                 Two_star_rating = ratings.text.strip()
                 # print(Two_star_rating)
@@ -92,7 +97,7 @@ for i in product_links:
             else:
                 Five_star_rating = ratings.text.strip()
                 # print(Five_star_rating)
-    Reviews =''
+    Reviews=''
     Reviews_tag = soup.find_all('p',{'class':'_2-N8zT'})
     for review in Reviews_tag:
         Reviews += ','+(review.text.strip())
@@ -106,15 +111,91 @@ for i in product_links:
     #appending product details to the list
     Product_details_dict.append(product_details)
 
-print(Product_details_dict)
-#file name to store
-file_name = 'S:\Projects\Web scrapping\Scraper1.csv'
-#filed name
-field_names = ['Name','Actual_price','Selling_price','Overall_rating','No_of_ratings_and_reviews','Reviews','Discount','One_star',
-               'Two_star','Three_star','Four_star','Five_star']
+# print(Product_details_dict)
+
+Df = pd.DataFrame(Product_details_dict)
+# print(Df)
+postive = []
+negative = []
+neutral = []
+for i in Df['Reviews']:
+    try:
+        lst = i.split(',')
+    except:
+        lst = []
+    if not lst:
+        pos=[]
+        neg=[]
+        neu=[]
+    if lst:
+        pos=[]
+        neg=[]
+        neu=[]
+        for words in lst:
+            # print(words)
+            text = words
+            lower_case=text.lower()
+            cleaned_text=lower_case.translate(str.maketrans('', '', string.punctuation))
+
+            # Using word_tokenize because it's faster than split()
+            tokenized_words=word_tokenize(cleaned_text, "english")
+            # Removing Stop Words
+            final_words=[]
+            for word in tokenized_words:
+                if word not in stopwords.words('english'):
+                    final_words.append(word)
+
+            # Lemmatization - From plural to single + Base form of a word (example better-> good)
+            lemma_words=[]
+            for word in final_words:
+                word=WordNetLemmatizer().lemmatize(word)
+                lemma_words.append(word)
+
+            emotion_list=[]
+            with open('emotions.txt', 'r') as file:
+                for line in file:
+                    clear_line=line.replace("\n", '').replace(",", '').replace("'", '').strip()
+                    word, emotion=clear_line.split(':')
+
+                    if word in lemma_words:
+                        emotion_list.append(emotion)
+
+            # print(emotion_list)
+            # w=Counter(emotion_list)
+            # print(w)
+
+            def sentiment_analyse(sentiment_text):
+                score=SentimentIntensityAnalyzer().polarity_scores(sentiment_text)
+                if score['neg'] > score['pos']:
+                    neg.append(1)
+                    # print("Negative Sentiment")
+                elif score['neg'] < score['pos']:
+                    pos.append(1)
+                    # print("Positive Sentiment")
+                else:
+                    neu.append(1)
+                    # print("Neutral Sentiment")
+            sentiment_analyse(cleaned_text)
+
+    print(sum(pos), sum(neg), sum(neu))
+    postive.append(sum(pos))
+    negative.append(sum(neg))
+    neutral.append(sum(neu))
 
 
-with open(file_name, 'w',newline='',encoding='utf-8') as csvfile:
-    writer = csv.DictWriter(csvfile, fieldnames = field_names)
-    writer.writeheader()
-    writer.writerows(Product_details_dict)
+print(postive)
+print(negative)
+print(neutral)
+
+Df['Postive']=postive
+Df['Negative']=negative
+Df['Neutral'] = neutral
+Df.to_csv('S:\Projects\Web scrapping\Scraper2.csv')
+print(Df[['Postive','Negative','Neutral']])
+
+
+
+
+
+
+
